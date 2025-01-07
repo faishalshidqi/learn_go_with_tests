@@ -14,6 +14,12 @@ type Driver struct {
 	client         GreeterClient
 }
 
+func (d *Driver) Close() {
+	if d.conn != nil {
+		d.conn.Close()
+	}
+}
+
 func (d *Driver) getClient() (greeterClient GreeterClient, err error) {
 	d.connectionOnce.Do(func() {
 		d.conn, err = grpc.Dial(d.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))

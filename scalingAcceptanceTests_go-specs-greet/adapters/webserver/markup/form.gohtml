@@ -1,0 +1,16 @@
+{{template "top" .}}
+    <form method="POST" action="greet">
+        <fieldset>
+            <legend>Greeting:</legend>
+            <input id="greet-input" type="text" name="name" placeholder="Greeting:" />
+            <input type="submit"/>
+        </fieldset>
+    </form>
+    <form method="POST" action="curse">
+        <fieldset>
+            <legend>Curse:</legend>
+            <input id="curse-input" type="text" name="name" placeholder="Curse:" />
+            <input type="submit"/>
+        </fieldset>
+    </form>
+{{template "bottom" .}}

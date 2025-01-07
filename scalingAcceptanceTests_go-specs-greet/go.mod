@@ -5,6 +5,7 @@ go 1.23
 require (
 	github.com/alecthomas/assert/v2 v2.11.0
 	github.com/docker/go-connections v0.5.0
+	github.com/go-rod/rod v0.116.2
 	github.com/testcontainers/testcontainers-go v0.34.0
 	google.golang.org/grpc v1.64.1
 	google.golang.org/protobuf v1.33.0
@@ -52,6 +53,11 @@ require (
 	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
+	github.com/ysmood/fetchup v0.2.3 // indirect
+	github.com/ysmood/goob v0.4.0 // indirect
+	github.com/ysmood/got v0.40.0 // indirect
+	github.com/ysmood/gson v0.7.3 // indirect
+	github.com/ysmood/leakless v0.9.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect
 	go.opentelemetry.io/otel v1.24.0 // indirect
