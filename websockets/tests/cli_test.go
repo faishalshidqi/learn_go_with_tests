@@ -13,6 +13,8 @@ import (
 type GameSpy struct {
 	StartedWith  int
 	FinishedWith string
+	BlindAlert   []byte
+
 	StartCalled  bool
 	FinishCalled bool
 }
@@ -20,11 +22,13 @@ type GameSpy struct {
 func (g *GameSpy) Start(numberOfPlayers int, to io.Writer) {
 	g.StartedWith = numberOfPlayers
 	g.StartCalled = true
+
+	to.Write(g.BlindAlert)
 }
 
 func (g *GameSpy) Finish(winner string) {
-	g.FinishedWith = winner
 	g.FinishCalled = true
+	g.FinishedWith = winner
 }
 
 func userSends(messages ...string) io.Reader {
@@ -69,7 +73,7 @@ func TestCLI(t *testing.T) {
 		in := userSends("3", "Cleo wins")
 		playerStore := &StubPlayerStore{}
 		dummySpyAlerter := &SpyBlindAlerter{}
-		game := poker.NewGame(dummySpyAlerter, playerStore)
+		game := poker.NewTexasHoldem(dummySpyAlerter, playerStore)
 		cli := poker.NewCLI(in, dummyStdout, game)
 		cli.PlayPoker()
 
@@ -104,7 +108,7 @@ func TestCLI(t *testing.T) {
 func TestStartGame(t *testing.T) {
 	t.Run("schedules alerts on game start for 5 players", func(t *testing.T) {
 		blindAlerter := &SpyBlindAlerter{}
-		game := poker.NewGame(blindAlerter, dummyPlayerStore)
+		game := poker.NewTexasHoldem(blindAlerter, dummyPlayerStore)
 		game.Start(5, io.Discard)
 		cases := []scheduledAlert{
 			{0 * time.Second, 100},
@@ -123,7 +127,7 @@ func TestStartGame(t *testing.T) {
 	})
 	t.Run("schedules alerts on game start for 7 players", func(t *testing.T) {
 		blindAlerter := &SpyBlindAlerter{}
-		game := poker.NewGame(blindAlerter, dummyPlayerStore)
+		game := poker.NewTexasHoldem(blindAlerter, dummyPlayerStore)
 		game.Start(7, io.Discard)
 		cases := []scheduledAlert{
 			{0 * time.Second, 100},
@@ -145,15 +149,28 @@ func TestStartGame(t *testing.T) {
 
 func TestFinishGame(t *testing.T) {
 	store := &StubPlayerStore{}
-	game := poker.NewGame(dummySpyAlerter, store)
+	game := poker.NewTexasHoldem(dummySpyAlerter, store)
 	winner := "Ruth"
 	game.Finish(winner)
 	assertPlayerWin(t, store, winner)
 }
 
+func retryUntil(d time.Duration, f func() bool) bool {
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		if f() {
+			return true
+		}
+	}
+	return false
+}
+
 func assertFinishCalledWith(t *testing.T, game *GameSpy, player string) {
 	t.Helper()
-	if game.FinishedWith != player {
+	passed := retryUntil(500*time.Millisecond, func() bool {
+		return game.FinishedWith == player
+	})
+	if !passed {
 		t.Errorf("finished with %v; want %v", game.FinishedWith, player)
 	}
 }
@@ -169,8 +186,11 @@ func assertMessagesSentToUser(t testing.TB, stdout *bytes.Buffer, messages ...st
 
 func assertGameStartedWith(t testing.TB, game *GameSpy, numPlayer int) {
 	t.Helper()
-	if game.StartedWith != numPlayer {
-		t.Errorf("start called %v; want %v", game.StartCalled, numPlayer)
+	passed := retryUntil(500*time.Millisecond, func() bool {
+		return game.StartedWith == numPlayer
+	})
+	if !passed {
+		t.Errorf("start called %v; want %v", game.StartedWith, numPlayer)
 	}
 }
 

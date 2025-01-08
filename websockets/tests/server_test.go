@@ -32,6 +32,14 @@ func (s *StubPlayerStore) GetLeague(order bool) poker.League {
 	return s.league
 }
 
+const (
+	tenMS = 10 * time.Millisecond
+)
+
+var (
+	dummyGame = &GameSpy{}
+)
+
 func TestGETPlayers(t *testing.T) {
 	store := StubPlayerStore{
 		map[string]int{
@@ -41,7 +49,7 @@ func TestGETPlayers(t *testing.T) {
 		[]string{},
 		[]poker.Player{},
 	}
-	server, _ := poker.NewPlayerServer(&store)
+	server, _ := poker.NewPlayerServer(&store, dummyGame)
 	t.Run("returns Pepper's score", func(t *testing.T) {
 		request := newGetScoreRequest("Pepper")
 		response := httptest.NewRecorder()
@@ -79,7 +87,7 @@ func TestStoreWins(t *testing.T) {
 		[]string{},
 		[]poker.Player{},
 	}
-	server, _ := poker.NewPlayerServer(&store)
+	server, _ := poker.NewPlayerServer(&store, dummyGame)
 	t.Run("returns accepted on POST", func(t *testing.T) {
 		playerName := "Pepper"
 		request := newPostWinRequest(playerName)
@@ -103,7 +111,7 @@ func TestLeague(t *testing.T) {
 		[]string{},
 		wantedLeague,
 	}
-	server, _ := poker.NewPlayerServer(&store)
+	server, _ := poker.NewPlayerServer(&store, dummyGame)
 
 	t.Run("returns 200 on /league as json", func(t *testing.T) {
 		request := newGetLeagueRequest()
@@ -120,7 +128,7 @@ func TestLeague(t *testing.T) {
 
 func TestGame(t *testing.T) {
 	t.Run("GET /game returns 200", func(t *testing.T) {
-		server := mustMakePlayerServer(t, &StubPlayerStore{})
+		server := mustMakePlayerServer(t, &StubPlayerStore{}, dummyGame)
 
 		request := newGameRequest()
 		response := httptest.NewRecorder()
@@ -129,22 +137,50 @@ func TestGame(t *testing.T) {
 
 		assertEqual(t, response.Code, http.StatusOK)
 	})
-	t.Run("when we get a message over a websocket it is a winner of a game", func(t *testing.T) {
-		store := &StubPlayerStore{}
+	t.Run("start a game with 3 players and declare Ruth the winner", func(t *testing.T) {
+		wantedBlindAlert := "Blind is 100"
 		winner := "Ruth"
-		server := httptest.NewServer(mustMakePlayerServer(t, store))
-
+		game := &GameSpy{BlindAlert: []byte(wantedBlindAlert)}
+		server := httptest.NewServer(mustMakePlayerServer(t, dummyPlayerStore, game))
 		wsURL := fmt.Sprintf("ws://%s/ws", strings.TrimPrefix(server.URL, "http://"))
 		ws := mustDialWS(t, wsURL)
+
+		defer server.Close()
 		defer ws.Close()
+
+		writeWSMessage(t, ws, "3")
 		writeWSMessage(t, ws, winner)
-		// TODO: arbitrary sleep
-		time.Sleep(10 * time.Millisecond)
-		assertPlayerWin(t, store, winner)
+		game.Finish(winner)
+
+		within(t, tenMS, func() { assertWebsocketGotMessage(t, ws, wantedBlindAlert) })
+		assertGameStartedWith(t, game, 3)
+		assertFinishCalledWith(t, game, winner)
 	})
 }
 
-func writeWSMessage(t *testing.T, ws *websocket.Conn, message string) {
+func assertWebsocketGotMessage(t *testing.T, ws *websocket.Conn, want string) {
+	_, message, _ := ws.ReadMessage()
+	if string(message) != want {
+		t.Errorf("wanted %s, got %s", string(message), want)
+	}
+}
+
+func within(t testing.TB, d time.Duration, assert func()) {
+	t.Helper()
+	done := make(chan struct{}, 1)
+	go func() {
+		assert()
+		done <- struct{}{}
+	}()
+	select {
+	case <-time.After(d):
+		t.Errorf("timed out waiting for %v", d)
+	case <-done:
+	}
+}
+
+func writeWSMessage(t testing.TB, ws *websocket.Conn, message string) {
+	t.Helper()
 	if err := ws.WriteMessage(websocket.TextMessage, []byte(message)); err != nil {
 		t.Fatalf("failed to write to ws: %v", err)
 	}
@@ -158,8 +194,8 @@ func mustDialWS(t *testing.T, url string) *websocket.Conn {
 	return ws
 }
 
-func mustMakePlayerServer(t *testing.T, store poker.PlayerStore) *poker.PlayerServer {
-	server, err := poker.NewPlayerServer(store)
+func mustMakePlayerServer(t *testing.T, store poker.PlayerStore, game poker.Game) *poker.PlayerServer {
+	server, err := poker.NewPlayerServer(store, game)
 	if err != nil {
 		t.Fatalf("failed to make player server: %v", err)
 	}
@@ -179,6 +215,7 @@ func assertLeague(t *testing.T, got, wantedLeague []poker.Player) {
 }
 
 func getLeagueFromResponse(t testing.TB, body io.Reader) (league []poker.Player) {
+	t.Helper()
 	league, _ = poker.NewLeague(body)
 	return
 }

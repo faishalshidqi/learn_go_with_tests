@@ -12,7 +12,7 @@ func TestRecordingWinsThenRetrievingEm(t *testing.T) {
 	defer cleanDatabase()
 	store, err := poker.NewFSPlayerStore(database)
 	assertNoError(t, err)
-	server, _ := poker.NewPlayerServer(store)
+	server, _ := poker.NewPlayerServer(store, dummyGame)
 	playerName := "Pepper"
 
 	server.ServeHTTP(httptest.NewRecorder(), newPostWinRequest(playerName))
